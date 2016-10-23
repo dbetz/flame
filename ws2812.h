@@ -55,57 +55,6 @@ typedef struct {
     int cog;
 } ws2812_t;
 
-// simpler type name for use with SimpleIDE
-typedef ws2812_t ws2812;
-
-/**
- * @brief Start a driver for a chain of WS2812 LEDs
- *
- * @param pin Pin connected to the first LED
- * @param count Number of LEDs in the chain
- * @returns Driver COG number or -1 on failure
- *
- */
-int ws2812_start(int pin, int count);
-
-/**
- * @brief Start a driver for a chain of WS2812B LEDs
- *
- * @param pin Pin connected to the first LED
- * @param count Number of LEDs in the chain
- * @returns Driver COG number or -1 on failure
- *
- */
-int ws2812b_start(int pin, int count);
-
-/**
- * @brief Set the colors to display
- *
- * @param colors Array of colors, one for each LED in the chain
- */
-void ws2812_set(int *colors);
-
-/**
- * @brief Open a driver for WS2812 chips
- * 
- * @returns A pointer to the driver structure or NULL on failure
- */
-ws2812_t *ws2812_open(void);
-
-/**
- * @brief Open a driver for WS2812B chips
- * 
- * @returns A pointer to the driver structure or NULL on failure
- */
-ws2812_t *ws2812b_open(void);
-
-/**
- * @brief Close a WS2812 or WS2812B driver
- *
- * @param driver Pointer to the driver structure
- */
-void ws2812_close(ws2812_t *driver);
-
 /**
  * @brief Initialize a driver for WS2812 chips
  *
