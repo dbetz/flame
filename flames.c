@@ -94,7 +94,7 @@ ADJUSTER adjusters[] = {
 
 #define EEPROM_BASE     0x8000
 #define EEPROM_MAGIC    "FIRE"
-#define EEPROM_VERSION  2
+#define EEPROM_VERSION  3
 
 typedef struct {
     char magic[4];
@@ -235,10 +235,10 @@ static void loadSettings(void)
         strncpy(eepromData.magic, EEPROM_MAGIC, sizeof(eepromData.magic));
         eepromData.version = EEPROM_VERSION;
         eepromData.levelSetting = 50;
-        eepromData.redSetting = 226;
-        eepromData.greenSetting = 121;
-        eepromData.blueSetting = 35;
-        eepromData.depthSetting = 55;
+        eepromData.redSetting = 88; // 226
+        eepromData.greenSetting = 47; // 121
+        eepromData.blueSetting = 14; // 35
+        eepromData.depthSetting = 21; // 55
         eepromData.rateSetting = 103;
     }
     flameState.levelSetting = eepromData.levelSetting;
