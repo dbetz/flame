@@ -17,7 +17,7 @@ ws2812_term.o \
 ws2812_driver.o \
 eeprom.o
 
-TARGET=flame
+TARGET=flames
 
 all:	$(TARGET).elf
 
