@@ -57,7 +57,7 @@ struct par encoder;
 usefw(encoder_fw);
 
 typedef struct {
-    volatile uint32_t *buf;
+    uint32_t *buf;
     int rowWidth;
     int pixelWidth;
     int pixelHeight;
@@ -340,7 +340,7 @@ static void do_flame(void *params)
             }
             i += state->pixelWidth;
         }
-        ws2812_update(&ledState, RGB_LED_PIN, ledValues, RGB_LED_COUNT);
+        ws2812_update(&ledState, RGB_LED_PIN, state->buf, RGB_LED_COUNT);
         waitcnt(CNT + (10 + rand() % state->rate) * state->ticksPerMS);
     }
 }
