@@ -33,6 +33,7 @@ enum {
     LCD_BACKLIGHT_ON        = 0x11,
     LCD_BACKLIGHT_OFF       = 0x12,
     LCD_CURSOR_OFF_NO_BLINK = 0x16,
+    LCD_CURSOR_OFF_BLINK    = 0x17,
     LCD_MOVE_CURSOR         = 0x80
 };
 
