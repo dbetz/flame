@@ -94,7 +94,7 @@ ADJUSTER adjusters[] = {
 
 #define EEPROM_BASE     0x8000
 #define EEPROM_MAGIC    "FIRE"
-#define EEPROM_VERSION  3
+#define EEPROM_VERSION  1
 
 typedef struct {
     char magic[4];
@@ -141,7 +141,7 @@ int main(void)
     FdSerial_tx(&lcd, LCD_BACKLIGHT_ON);
     printf("FdSerial_start returned %d\n", ret);
     lcdPutStr(0, 0, "L   R   G   B  ");
-    lcdPutStr(1, 0, "        D   R  ");
+    lcdPutStr(1, 0, "      1 D   R  ");
 
     printf("Initializing encoder...\n");
     encoder.m.pin = 10;
@@ -225,7 +225,7 @@ static void updateSettings(void)
     flameState.green = (flameState.levelSetting * flameState.greenSetting * 255) / (99 * 99);
     flameState.blue = (flameState.levelSetting * flameState.blueSetting * 255) / (99 * 99);
     flameState.depth = (flameState.depthSetting * 255) / 99;
-    flameState.rate = (flameState.rateSetting * 1000) / 99;
+    flameState.rate = ((99 - flameState.rateSetting) * 990) / 99;
 }
 
 static void loadSettings(void)
@@ -239,7 +239,7 @@ static void loadSettings(void)
         eepromData.greenSetting = 47; // 121
         eepromData.blueSetting = 14; // 35
         eepromData.depthSetting = 21; // 55
-        eepromData.rateSetting = 103;
+        eepromData.rateSetting = 99;
     }
     flameState.levelSetting = eepromData.levelSetting;
     flameState.redSetting = eepromData.redSetting;
