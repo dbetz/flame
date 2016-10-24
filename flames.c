@@ -6,16 +6,27 @@
 #include "ws2812.h"
 #include "eeprom.h"
 
-#define LCD_RX_PIN      8   // not really needed but fds requires an rx pin
-#define LCD_TX_PIN      9
+#define LCD_RX_PIN          8   // not really needed but fds requires an rx pin
+#define LCD_TX_PIN          9
 
-#define RGB_LED_PIN     0
-#define RGB_LED_COUNT   144
+#define RGB_LED_PIN         0
 
-#define RED_LED		    12
-#define GREEN_LED	    13
-#define BUTTON		    14
-#define BLUE_LED	    15
+#if 1
+#define RGB_LED_COUNT       144
+#define RGB_ROW_WIDTH       144
+#define RGB_PIXEL_WIDTH     1
+#define RGB_PIXEL_HEIGHT    1
+#else
+#define RGB_LED_COUNT       140
+#define RGB_ROW_WIDTH       28
+#define RGB_PIXEL_WIDTH     2
+#define RGB_PIXEL_HEIGHT    5
+#endif
+
+#define RED_LED		        12
+#define GREEN_LED	        13
+#define BUTTON		        14
+#define BLUE_LED	        15
 
 enum {
     LCD_CLEAR               = 0x0c,
@@ -47,7 +58,9 @@ usefw(encoder_fw);
 
 typedef struct {
     volatile uint32_t *buf;
-    int length;
+    int rowWidth;
+    int pixelWidth;
+    int pixelHeight;
     int ticksPerMS;
 
     volatile int red;
@@ -157,7 +170,9 @@ int main(void)
     eeprom_init();
         
     flameState.buf = ledValues;
-    flameState.length = RGB_LED_COUNT;
+    flameState.rowWidth = RGB_ROW_WIDTH;
+    flameState.pixelWidth = RGB_PIXEL_WIDTH;
+    flameState.pixelHeight = RGB_PIXEL_HEIGHT;
     flameState.ticksPerMS = CLKFREQ / 1000;
     loadSettings();
     updateSettings();
@@ -306,19 +321,24 @@ static void do_flame(void *params)
 {
     FLAME_STATE *state = params;
     for (;;) {
-        int i;
-        for (i = 0; i < state->length; ++i) {
+        int x, px, py;
+        int i = 0;
+        for (x = 0; x < state->rowWidth; x += state->pixelWidth) {
             int flicker = rand() % state->depth;
             int red = state->red - flicker;
             int green = state->green - flicker;
             int blue = state->blue - flicker;
-            if (red < 0)
-                red = 0;
-            if (green < 0)
-                green = 0;
-            if (blue < 0)
-                blue = 0;
-            state->buf[i] = (red << 16) | (green << 8) | blue;
+            if (red < 0) red = 0;
+            if (green < 0) green = 0;
+            if (blue < 0) blue = 0;
+            int color = (red << 16) | (green << 8) | blue;
+            int j = i;
+            for (py = 0; py < state->pixelHeight; ++py) {
+                for (px = 0; px < state->pixelWidth; ++px)
+                    state->buf[j + px] = color;
+                j += state->rowWidth;
+            }
+            i += state->pixelWidth;
         }
         ws2812_update(&ledState, RGB_LED_PIN, ledValues, RGB_LED_COUNT);
         waitcnt(CNT + (10 + rand() % state->rate) * state->ticksPerMS);
