@@ -6,27 +6,28 @@
 #include "ws2812.h"
 #include "eeprom.h"
 
+#define RGB_LED_PIN         0
+
 #define LCD_RX_PIN          8   // not really needed but fds requires an rx pin
 #define LCD_TX_PIN          9
 
-#define RGB_LED_PIN         0
+#define ENCODER_A_PIN       10
+#define ENCODER_B_PIN       11
+
+#define RED_LED_PIN		    12
+#define GREEN_LED_PIN	    13
+#define BUTTON_PIN		    14
+#define BLUE_LED_PIN	    15
 
 #if 1
-#define RGB_LED_COUNT       144
 #define RGB_ROW_WIDTH       144
-#define RGB_PIXEL_WIDTH     1
 #define RGB_PIXEL_HEIGHT    1
 #else
-#define RGB_LED_COUNT       140
 #define RGB_ROW_WIDTH       28
-#define RGB_PIXEL_WIDTH     2
 #define RGB_PIXEL_HEIGHT    5
 #endif
 
-#define RED_LED		        12
-#define GREEN_LED	        13
-#define BUTTON		        14
-#define BLUE_LED	        15
+#define RGB_LED_COUNT       (RGB_ROW_WIDTH * RGB_PIXEL_HEIGHT)
 
 enum {
     LCD_CLEAR               = 0x0c,
@@ -59,17 +60,19 @@ usefw(encoder_fw);
 
 typedef struct {
     uint32_t *buf;
+    int preset;
     int rowWidth;
-    int pixelWidth;
     int pixelHeight;
     int ticksPerMS;
 
+    volatile int pixelWidth;
     volatile int red;
     volatile int green;
     volatile int blue;
     volatile int depth;
     volatile int rate;
 
+    int pixelWidthSetting;
     int levelSetting;
     int redSetting;
     int greenSetting;
@@ -89,6 +92,7 @@ uint32_t ledValues[RGB_LED_COUNT];
 
 typedef struct {
     const char *label;
+    const char *format;
     volatile int *pValue;
     int minValue;
     int maxValue;
@@ -97,22 +101,25 @@ typedef struct {
 } ADJUSTER;
 
 ADJUSTER adjusters[] = {
-{   "Level",    &flameState.levelSetting,   0,  99,     0,  1   },
-{   "Red  ",    &flameState.redSetting,     0,  99,     0,  5   },
-{   "Green",    &flameState.greenSetting,   0,  99,     0,  9   },
-{   "Blue ",    &flameState.blueSetting,    0,  99,     0,  13  },
-{   "Depth",    &flameState.depthSetting,   0,  99,     1,  9   },
-{   "Rate ",    &flameState.rateSetting,    0,  99,     1,  13  },
-{   NULL,       NULL,                       0,  0,      0,  0   },
+{   "L",        "%02d", &flameState.levelSetting,       0,  99,     0,  1   },
+{   "R",        "%02d", &flameState.redSetting,         0,  99,     0,  5   },
+{   "G",        "%02d", &flameState.greenSetting,       0,  99,     0,  9   },
+{   "B",        "%02d", &flameState.blueSetting,        0,  99,     0,  13  },
+{   "#",        "%01d", &flameState.preset,             1,  1,      1,  1   },
+{   "P",        "%02d", &flameState.pixelWidthSetting,  1,  10,     1,  5   },
+{   "D",        "%02d", &flameState.depthSetting,       0,  99,     1,  9   },
+{   "S",        "%02d", &flameState.rateSetting,        0,  99,     1,  13  },
+{   NULL,       NULL,   NULL,                           0,  0,      0,  0   },
 };
 
 #define EEPROM_BASE     0x8000
 #define EEPROM_MAGIC    "FIRE"
-#define EEPROM_VERSION  1
+#define EEPROM_VERSION  2
 
 typedef struct {
     char magic[4];
     int version;
+    int pixelWidthSetting;
     int levelSetting;
     int redSetting;
     int greenSetting;
@@ -125,40 +132,30 @@ EEPROM_DATA eepromData;
 
 static void do_flame(void *params);
 
-static void lcdMoveCursor(int row, int col);
-static void lcdPutStr(int row, int col, const char *buf);
-static void lcdUpdateValue(int row, int col, int value);
-
 static void updateSettings(void);
 static void loadSettings(void);
 static void saveSettings(void);
 
-static void selectMenu(ADJUSTER *adjuster);
-
-static ADJUSTER *getAdjusterByIndex(int index);
-static void displayAdjusterLabel(ADJUSTER *adjuster);
-static void displayAdjusterValue(ADJUSTER *adjuster);
 static void selectAdjuster(ADJUSTER *adjuster);
+static void displayAdjusterValue(ADJUSTER *adjuster);
+
+static void lcdMoveCursor(int row, int col);
+static void lcdPutStr(int row, int col, const char *buf);
 
 int main(void)
 {
-    uint32_t ledMask = (1 << RED_LED) | (1 << GREEN_LED) | (1 << BLUE_LED);
-    uint32_t redMask = 1 << RED_LED;
-    uint32_t blueMask = 1 << BLUE_LED;
-    uint32_t buttonMask = 1 << BUTTON;
+    uint32_t buttonMask = 1 << BUTTON_PIN;
     ADJUSTER *adjuster;
     int ret;
 
     ret = FdSerial_start(&lcd, LCD_RX_PIN, LCD_TX_PIN, 0, 19200);
     FdSerial_tx(&lcd, LCD_CLEAR);
-    FdSerial_tx(&lcd, LCD_CURSOR_OFF_NO_BLINK);
+    FdSerial_tx(&lcd, LCD_CURSOR_OFF_BLINK);
     FdSerial_tx(&lcd, LCD_BACKLIGHT_ON);
     printf("FdSerial_start returned %d\n", ret);
-    lcdPutStr(0, 0, "L   R   G   B  ");
-    lcdPutStr(1, 0, "      1 D   R  ");
 
     printf("Initializing encoder...\n");
-    encoder.m.pin = 10;
+    encoder.m.pin = ENCODER_A_PIN;
     encoder.m.minValue = 0;
     encoder.m.maxValue = 255;
     ret = cognew(LOAD_START(encoder_fw), &encoder.m);
@@ -171,8 +168,8 @@ int main(void)
     eeprom_init();
         
     flameState.buf = ledValues;
+    flameState.preset = 1;
     flameState.rowWidth = RGB_ROW_WIDTH;
-    flameState.pixelWidth = RGB_PIXEL_WIDTH;
     flameState.pixelHeight = RGB_PIXEL_HEIGHT;
     flameState.ticksPerMS = CLKFREQ / 1000;
     loadSettings();
@@ -181,36 +178,25 @@ int main(void)
     ret = cogstart(do_flame, &flameState, stack, sizeof(stack));
     printf("cogstart returned %d\n", ret);
 
-    DIRA |= ledMask;
-	OUTA &= ~blueMask;
-
     printf("Entering idle loop...\n");
     int lastButtonValue = 0;
     int lastValue = 0;
-    int adjustingValue = 0;
     
     for (adjuster = adjusters; adjuster->label; ++adjuster)
         displayAdjusterValue(adjuster);
     adjuster = adjusters;
-    displayAdjusterLabel(adjuster);
-    selectMenu(adjuster);
+    selectAdjuster(adjuster);
 
     for (;;) {
 
         if (INA & buttonMask) {
             if (!lastButtonValue) {
                 lastButtonValue = 1;
-                adjustingValue = !adjustingValue;
-                OUTA |= ledMask;
-                if (adjustingValue) {
-                    selectAdjuster(adjuster);
-                    OUTA &= ~redMask;
-                }
-                else {
-                    saveSettings();
-                    selectMenu(adjuster);
-                    OUTA &= ~blueMask;
-                }
+                saveSettings();
+                ++adjuster;
+                if (!adjuster->label)
+                    adjuster = adjusters;
+                selectAdjuster(adjuster);
             }
         }
         else {
@@ -219,16 +205,10 @@ int main(void)
 
         if (encoder.m.value != lastValue) {
             lastValue = encoder.m.value;
-            if (adjustingValue) {
-                *adjuster->pValue = lastValue;
-                displayAdjusterValue(adjuster);
-                updateSettings();
-            }
-            else {
-                if (!(adjuster = getAdjusterByIndex(lastValue)))
-                    adjuster = adjusters;
-                displayAdjusterLabel(adjuster);
-            }
+            *adjuster->pValue = lastValue;
+            displayAdjusterValue(adjuster);
+            lcdMoveCursor(adjuster->valueRow, adjuster->valueCol - 1);
+            updateSettings();
         }
     }
 
@@ -237,6 +217,7 @@ int main(void)
 
 static void updateSettings(void)
 {
+    flameState.pixelWidth = flameState.pixelWidthSetting;
     flameState.red = (flameState.levelSetting * flameState.redSetting * 255) / (99 * 99);
     flameState.green = (flameState.levelSetting * flameState.greenSetting * 255) / (99 * 99);
     flameState.blue = (flameState.levelSetting * flameState.blueSetting * 255) / (99 * 99);
@@ -250,6 +231,7 @@ static void loadSettings(void)
     if (ret != 0 || strncmp(eepromData.magic, EEPROM_MAGIC, sizeof(eepromData.magic)) != 0 || eepromData.version != EEPROM_VERSION) {
         strncpy(eepromData.magic, EEPROM_MAGIC, sizeof(eepromData.magic));
         eepromData.version = EEPROM_VERSION;
+        eepromData.pixelWidthSetting = 2;
         eepromData.levelSetting = 50;
         eepromData.redSetting = 88; // 226
         eepromData.greenSetting = 47; // 121
@@ -257,6 +239,7 @@ static void loadSettings(void)
         eepromData.depthSetting = 21; // 55
         eepromData.rateSetting = 99;
     }
+    flameState.pixelWidthSetting = eepromData.pixelWidthSetting;
     flameState.levelSetting = eepromData.levelSetting;
     flameState.redSetting = eepromData.redSetting;
     flameState.greenSetting = eepromData.greenSetting;
@@ -267,13 +250,15 @@ static void loadSettings(void)
 
 static void saveSettings(void)
 {
-    if (flameState.levelSetting != eepromData.levelSetting
+    if (flameState.pixelWidthSetting != eepromData.pixelWidthSetting
+    ||  flameState.levelSetting != eepromData.levelSetting
     ||  flameState.redSetting != eepromData.redSetting
     ||  flameState.greenSetting != eepromData.greenSetting
     ||  flameState.blueSetting != eepromData.blueSetting
     ||  flameState.depthSetting != eepromData.depthSetting
     ||  flameState.rateSetting != eepromData.rateSetting) {
         EEPROM_DATA newData = eepromData;
+        newData.pixelWidthSetting = flameState.pixelWidthSetting;
         newData.levelSetting = flameState.levelSetting;
         newData.redSetting = flameState.redSetting;
         newData.greenSetting = flameState.greenSetting;
@@ -285,33 +270,17 @@ static void saveSettings(void)
     }
 }
 
-static void selectMenu(ADJUSTER *adjuster)
-{
-    encoder.m.minValue = 0;
-    encoder.m.maxValue = sizeof(adjusters) / sizeof(ADJUSTER) - 2;
-    encoder.m.value = adjuster - adjusters;
-    encoder.m.wrap = 1;
-}
-
-static ADJUSTER *getAdjusterByIndex(int index)
-{
-    if (index < 0 || index >= sizeof(adjusters) / sizeof(ADJUSTER) - 1)
-        return NULL;
-    return &adjusters[index];
-}
-
-static void displayAdjusterLabel(ADJUSTER *adjuster)
-{
-    lcdPutStr(1, 0, adjuster->label);
-}
-
 static void displayAdjusterValue(ADJUSTER *adjuster)
 {
-    lcdUpdateValue(adjuster->valueRow, adjuster->valueCol, *adjuster->pValue);
+    char buf[10];
+    lcdPutStr(adjuster->valueRow, adjuster->valueCol - 1, adjuster->label);
+    sprintf(buf, adjuster->format, *adjuster->pValue);
+    lcdPutStr(adjuster->valueRow, adjuster->valueCol, buf);
 }
 
 static void selectAdjuster(ADJUSTER *adjuster)
 {
+    lcdMoveCursor(adjuster->valueRow, adjuster->valueCol - 1);
     encoder.m.value = *adjuster->pValue;
     encoder.m.minValue = adjuster->minValue;
     encoder.m.maxValue = adjuster->maxValue;
@@ -335,8 +304,10 @@ static void do_flame(void *params)
             int color = (red << 16) | (green << 8) | blue;
             int j = i;
             for (py = 0; py < state->pixelHeight; ++py) {
-                for (px = 0; px < state->pixelWidth; ++px)
-                    state->buf[j + px] = color;
+                for (px = 0; px < state->pixelWidth; ++px) {
+                    if (j + px < state->rowWidth)
+                        state->buf[j + px] = color;
+                }
                 j += state->rowWidth;
             }
             i += state->pixelWidth;
@@ -358,9 +329,3 @@ static void lcdPutStr(int row, int col, const char *buf)
         FdSerial_tx(&lcd, *buf++);
 }
 
-static void lcdUpdateValue(int row, int col, int value)
-{
-    char buf[10];
-    sprintf(buf, "%02d", value);
-    lcdPutStr(row, col, buf);    
-}
