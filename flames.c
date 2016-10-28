@@ -10,6 +10,7 @@
 
 #define LCD_RX_PIN          8   // not really needed but fds requires an rx pin
 #define LCD_TX_PIN          9
+#define LCD_BAUD_RATE		19200
 
 #define ENCODER_A_PIN       10
 #define ENCODER_B_PIN       11
@@ -148,7 +149,7 @@ int main(void)
     ADJUSTER *adjuster;
     int ret;
 
-    ret = FdSerial_start(&lcd, LCD_RX_PIN, LCD_TX_PIN, 0, 19200);
+    ret = FdSerial_start(&lcd, LCD_RX_PIN, LCD_TX_PIN, 0, LCD_BAUD_RATE);
     FdSerial_tx(&lcd, LCD_CLEAR);
     FdSerial_tx(&lcd, LCD_CURSOR_OFF_BLINK);
     FdSerial_tx(&lcd, LCD_BACKLIGHT_ON);
